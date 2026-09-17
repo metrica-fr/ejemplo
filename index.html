@@ -385,12 +385,14 @@ footer{text-align:center;padding:26px 18px 40px;font-size:12px;color:var(--gris-
     <div id="step4" style="display:none;" class="wa-final">
       <div class="em-ic">✅</div>
       <h3 style="margin:8px 0 4px;">¡Pedido listo!</h3>
-      <p style="font-size:13.5px;color:var(--gris-texto);margin-top:0;">
-        WhatsApp no permite adjuntar imágenes automáticamente desde un link. Primero descarga tu comprobante
-        (o déjalo listo) y luego, al abrir WhatsApp, adjúntalo en el chat antes o después de enviar el mensaje.
+      <p style="font-size:13.5px;color:var(--gris-texto);margin-top:0;" id="step4Desc">
+        Toca el botón: se abrirá el panel para compartir con tu comprobante y los datos del pedido ya listos, solo elige WhatsApp.
       </p>
-      <button class="btn-ghost" id="downloadProofBtn">⬇️ Descargar comprobante</button>
-      <button class="btn-main" id="sendWaBtn">Enviar pedido por WhatsApp</button>
+      <button class="btn-main" id="shareWaBtn">📲 Enviar pedido con foto a WhatsApp</button>
+      <div id="manualFallback" style="display:none;">
+        <button class="btn-ghost" id="downloadProofBtn">⬇️ Descargar comprobante</button>
+        <button class="btn-ghost" id="sendWaBtn">Abrir WhatsApp con el mensaje</button>
+      </div>
     </div>
   </div>
 </div>
@@ -795,6 +797,37 @@ ${itemsTxt}
 📎 Adjunto el comprobante de pago en este chat.`;
   window._lastWaMsg = msg;
 }
+function dataUrlToFile(dataUrl, filename){
+  const arr = dataUrl.split(",");
+  const mimeMatch = arr[0].match(/:(.*?);/);
+  const mime = mimeMatch ? mimeMatch[1] : "image/jpeg";
+  const bstr = atob(arr[1]);
+  let n = bstr.length;
+  const u8arr = new Uint8Array(n);
+  while(n--){ u8arr[n] = bstr.charCodeAt(n); }
+  return new File([u8arr], filename, {type:mime});
+}
+
+/* Intenta compartir foto + mensaje en un solo toque (móvil). Si el navegador
+   no lo soporta (típico en escritorio), muestra el respaldo manual. */
+$("shareWaBtn").onclick = async ()=>{
+  const msg = window._lastWaMsg || "";
+  if(uploadedProofDataUrl && navigator.share && navigator.canShare){
+    try{
+      const file = dataUrlToFile(uploadedProofDataUrl, "comprobante-pago.jpg");
+      if(navigator.canShare({files:[file]})){
+        await navigator.share({ files:[file], text: msg, title:"Pedido La Despensa" });
+        closeOv("checkoutOverlay");
+        return;
+      }
+    }catch(e){
+      if(e && e.name === "AbortError"){ return; } // el usuario cerró el panel de compartir
+    }
+  }
+  $("manualFallback").style.display = "block";
+  $("step4Desc").textContent = "Tu navegador no puede adjuntar la foto automáticamente aquí. Descárgala y súbela tú mismo en el chat.";
+  $("shareWaBtn").style.display = "none";
+};
 $("sendWaBtn").onclick = ()=>{
   const num = (PAYINFO.whatsapp || "").replace(/[^0-9]/g,"");
   const url = `https://wa.me/${num}?text=${encodeURIComponent(window._lastWaMsg||"")}`;
